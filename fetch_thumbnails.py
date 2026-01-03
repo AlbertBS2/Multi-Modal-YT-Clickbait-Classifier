@@ -1,76 +1,93 @@
-import csv
+import pandas as pd
+import requests
 import os
-import urllib.request
 from urllib.parse import urlparse, parse_qs
 
-def get_video_id(url):
+def get_video_id(youtube_url):
     """
-    Extracts the video ID from a YouTube URL.
+    Extract video ID from a YouTube URL
     """
-    try:
-        query = urlparse(url)
-        if query.hostname == 'youtu.be':
-            return query.path[1:]
-        if query.hostname in ('www.youtube.com', 'youtube.com'):
-            if query.path == '/watch':
-                p = parse_qs(query.query)
-                return p.get('v', [None])[0]
-            if query.path[:7] == '/embed/':
-                return query.path.split('/')[2]
-            if query.path[:3] == '/v/':
-                return query.path.split('/')[2]
-    except Exception:
-        return None
+    parsed_url = urlparse(youtube_url)
+    if parsed_url.hostname == 'youtu.be':
+        # Handle shortened URL format: https://youtu.be/ID
+        return parsed_url.path[1:]
+    elif parsed_url.hostname in ['www.youtube.com', 'youtube.com']:
+        # Handle full URL format: https://www.youtube.com/watch?v=ID
+        query_params = parse_qs(parsed_url.query)
+        return query_params.get('v', [None])[0]
     return None
 
-def fetch_thumbnails(csv_files, output_dir):
+def download_thumbnail(video_id, save_path):
     """
-    Reads URLs from CSV files and downloads their thumbnails to the output directory.
-    Uses the public YouTube thumbnail URL (hqdefault.jpg).
+    Download the YouTube thumbnail based on the video ID
     """
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(save_path, 'wb') as f:
+            f.write(response.content)
+        print(f"Downloaded thumbnail for video ID {video_id}")
+        return True
+    else:
+        print(f"Failed to download thumbnail for video ID {video_id}")
+        return False
 
-    for csv_file in csv_files:
-        if not os.path.exists(csv_file):
-            print(f"File {csv_file} not found.")
-            continue
-
-        print(f"Processing {csv_file}...")
-        with open(csv_file, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                url = row.get('url', '').strip()
-                if not url:
-                    continue
-                
-                video_id = get_video_id(url)
-                if video_id:
-                    # Construct the thumbnail URL
-                    # hqdefault.jpg is a high quality thumbnail that is generally available
-                    img_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
-                    
-                    filename = f"{video_id}.jpg"
-                    filepath = os.path.join(output_dir, filename)
-                    
-                    if not os.path.exists(filepath):
-                        try:
-                            print(f"Downloading thumbnail for {video_id}...")
-                            urllib.request.urlretrieve(img_url, filepath)
-                        except Exception as e:
-                            print(f"Failed to download {img_url}: {e}")
-                    else:
-                        # print(f"Thumbnail for {video_id} already exists.")
-                        pass
-                else:
-                    print(f"Could not extract video ID from {url}")
+def main(csv_file, output_folder, id_column='url', output_csv='data/ThumbnailTruthData/no-thumb.csv'):
+    """
+    Main function to download thumbnails and log failed URLs
+    """
+    # Read the CSV file
+    df = pd.read_csv(csv_file)
+    
+    # Ensure the output folder exists
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    # List to store the URLs with failed thumbnail retrieval
+    failed_urls = []
+    
+    # Loop through the URLs and download thumbnails
+    for i, url in enumerate(df[id_column]):
+        video_id = get_video_id(url)
+        if video_id:
+            save_path = os.path.join(output_folder, f"{video_id}.jpg")
+            if not download_thumbnail(video_id, save_path):
+                # Add the video URL to the list of failed thumbnails
+                failed_urls.append(url)
+            print(f"URL {i+1} of {len(df)} processed.")
+        else:
+            print(f"Invalid YouTube URL: {url}")
+            failed_urls.append(url)
+    
+    # If there are failed URLs, write them to a CSV file (outside the output folder)
+    if failed_urls:
+        failed_df = pd.DataFrame(failed_urls, columns=[id_column])
+        failed_df.to_csv(output_csv, index=False)  # Save the CSV in the current working directory
+        print(f"Failed thumbnail URLs saved to {output_csv}")
+    else:
+        print("All thumbnails downloaded successfully.")
 
 if __name__ == "__main__":
-    # Configuration
-    CSV_FILES = [
-        os.path.join('media', 'mtv.csv'),
-        os.path.join('media', 'nmtv.csv')
-    ]
-    OUTPUT_DIR = os.path.join('media', 'thumbnails')
+    """
+    For ease in evaluation/testing store the MTV and NMTV urls in separate 
+    csvs and name the output folder as MTV_Thumbnails or NMTV_Thumbnails
+    """
     
-    fetch_thumbnails(CSV_FILES, OUTPUT_DIR)
+    thumbnail_type = input("MTV or NMTV?\n")
+
+    if thumbnail_type.lower() == "mtv":
+        csv_file = "data/ThumbnailTruthData/mtv.csv"
+        output_folder = "data/ThumbnailTruthData/MTV_Thumbnails"
+        output_no_thumb_csv = "data/ThumbnailTruthData/mtv_no-thumb.csv"
+
+    elif thumbnail_type.lower() == "nmtv":
+        csv_file = "data/ThumbnailTruthData/nmtv.csv"
+        output_folder = "data/ThumbnailTruthData/NMTV_Thumbnails"
+        output_no_thumb_csv = "data/ThumbnailTruthData/nmtv_no-thumb.csv"
+    
+    else:
+        raise ValueError("Invalid input. Please enter 'MTV' or 'NMTV'.")
+
+    id_column = "url"  # Column that contains the YouTube video URLs or IDs
+
+    main(csv_file, output_folder, id_column, output_no_thumb_csv)
