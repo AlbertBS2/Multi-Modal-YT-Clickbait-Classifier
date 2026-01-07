@@ -1,4 +1,19 @@
 import pandas as pd
+from urllib.parse import urlparse, parse_qs
+
+
+def get_video_id(youtube_url):
+    """
+    Extract the video ID from a YouTube URL.
+    """
+    parsed_url = urlparse(youtube_url)
+    if parsed_url.hostname == 'youtu.be':
+        return parsed_url.path[1:]  
+    elif parsed_url.hostname in ['www.youtube.com', 'youtube.com']:
+        query_params = parse_qs(parsed_url.query)
+        return query_params.get('v', [None])[0]  
+    return None
+
 
 def remove_missing_data(data_csv, no_thumbnail_csv, no_transcripts_csv):
     """
@@ -16,6 +31,12 @@ def remove_missing_data(data_csv, no_thumbnail_csv, no_transcripts_csv):
 
     # Remove entries with missing transcripts
     clean_data = clean_data[~clean_data['url'].isin(no_transcripts['url'])]
+
+    # Transform URLs to video IDs
+    clean_data['url'] = clean_data['url'].apply(get_video_id)
+
+    # Rename the 'url' column to 'video_id'
+    clean_data = clean_data.rename(columns={'url': 'video_id'})
 
     return clean_data
 
@@ -42,7 +63,6 @@ def test_remove_missing_data(data_csv, no_thumbnail_csv, no_transcripts_csv):
     # Remove missing data
     clean_data = remove_missing_data(data_csv, no_thumbnail_csv, no_transcripts_csv)
     assert len(clean_data) == expected_rows, f"Expected {expected_rows} rows, but got {len(clean_data)}"
-
 
 
 def main():
