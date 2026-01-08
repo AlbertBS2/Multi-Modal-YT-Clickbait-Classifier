@@ -1,12 +1,12 @@
 """
-VLLM Feature Extraction using Claude API (Vision)
+VLLM Feature Extraction using Claude Batch API (Vision)
 
-This script uses Claude's vision capabilities to:
+This script uses Claude's Batch API with vision capabilities to:
 1. Generate descriptions of what thumbnails actually show
 2. Compare descriptions to actual video transcripts
 3. Calculate incongruence score (mismatch between thumbnail promise and content delivery)
 
-Uses Anthropic's Claude API with vision (no GPU required).
+Uses Anthropic's Batch API (50% cost savings compared to standard API).
 
 Requirements:
 - Anthropic API key (set as ANTHROPIC_API_KEY environment variable or in .env file)
@@ -27,60 +27,81 @@ import torch
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# LOAD .ENV FILE
 load_dotenv()
 
 
+# ENCODE IMAGE
 def encode_image_base64(image_path):
     """Encode image to base64 for Claude API."""
     with open(image_path, "rb") as image_file:
         return base64.standard_b64encode(image_file.read()).decode("utf-8")
 
 
-def describe_thumbnail_with_claude(image_path, client):
-    """
-    Use Claude's vision API to describe what the thumbnail shows.
+def load_video_info(video_data, thumbnail_dir, label):
+    """Load video info without encoding images."""
+    video_info = []
+    for _, row in video_data.iterrows():
+        video_id = row['video_id']
+        thumb_path = os.path.join(thumbnail_dir, f"{video_id}.jpg")
+        if os.path.exists(thumb_path):
+            video_info.append({
+                'video_id': video_id,
+                'transcript': row['transcript'],
+                'label': label
+            })
+    return video_info
 
-    Args:
-        image_path (str): Path to thumbnail image.
-        client (Anthropic): Anthropic API client.
 
-    Returns:
-        str: Description of what's shown in the thumbnail.
-    """
-    # Encode image
-    image_data = encode_image_base64(image_path)
+# BATCH
+def prepare_batch_requests(video_data, thumbnail_dir, label):
+    """Prepare batch requests for all videos."""
+    requests = []
+    video_info = []
 
-    # Determine image type
-    ext = Path(image_path).suffix.lower()
-    media_type = "image/jpeg" if ext in ['.jpg', '.jpeg'] else "image/png"
+    for _, row in video_data.iterrows():
+        video_id = row['video_id']
+        thumb_path = os.path.join(thumbnail_dir, f"{video_id}.jpg")
 
-    # Call Claude API with vision
-    message = client.messages.create(
-        model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet has vision
-        max_tokens=150,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": image_data,
+        if not os.path.exists(thumb_path):
+            continue
+
+        image_data = encode_image_base64(thumb_path)
+        ext = Path(thumb_path).suffix.lower()
+        media_type = "image/jpeg" if ext in ['.jpg', '.jpeg'] else "image/png"
+
+        requests.append({
+            "custom_id": video_id,
+            "params": {
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 150,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": image_data,
+                            },
                         },
-                    },
-                    {
-                        "type": "text",
-                        "text": "Describe what you see in this YouTube thumbnail in one detailed sentence. Focus on the main subject, their expression or action, and any visible text. Be objective and specific."
-                    }
-                ],
+                        {
+                            "type": "text",
+                            "text": "Describe what you see in this YouTube thumbnail in one detailed sentence. Focus on the main subject, their expression or action, and any visible text. Be objective and specific."
+                        }
+                    ],
+                }]
             }
-        ],
-    )
+        })
 
-    return message.content[0].text
+        video_info.append({
+            'video_id': video_id,
+            'transcript': row['transcript'],
+            'label': label
+        })
+
+    return requests, video_info
 
 
 def calculate_incongruence(claude_description, transcript, bert_model, bert_tokenizer, device):
@@ -129,76 +150,36 @@ def calculate_incongruence(claude_description, transcript, bert_model, bert_toke
 
     return incongruence_score, tvllm_embedding.cpu().numpy()
 
-def process_videos(video_data, thumbnail_dir, claude_client, bert_model, bert_tokenizer, device, label):
-    """
-    Process a batch of videos to extract Claude-based VLLM incongruence features.
-
-    Args:
-        video_data (pd.DataFrame): DataFrame with video_id and transcript columns.
-        thumbnail_dir (str): Directory containing thumbnail images.
-        claude_client: Anthropic API client.
-        bert_model: BERT model.
-        bert_tokenizer: BERT tokenizer.
-        device: Torch device.
-        label (int): Label for these videos (0 or 1).
-
-    Returns:
-        list: List of dictionaries with features.
-    """
+def process_batch_results(batch_results, video_info_map, bert_model, bert_tokenizer, device):
+    """Process batch API results and calculate incongruence scores."""
     results = []
-    failed_count = 0
-    rate_limit_delay = 0.5  # Delay between API calls to avoid rate limits
 
-    for idx, row in tqdm(video_data.iterrows(), total=len(video_data), desc=f"Label {label}"):
-        video_id = row['video_id']
-        transcript = row['transcript']
-        thumb_path = os.path.join(thumbnail_dir, f"{video_id}.jpg")
+    for result in tqdm(batch_results, desc="Processing results"):
+        video_id = result.custom_id
+        if video_id not in video_info_map:
+            continue
 
-        try:
-            # Generate thumbnail description using Claude
-            claude_desc = describe_thumbnail_with_claude(thumb_path, claude_client)
+        video = video_info_map[video_id]
+        claude_desc = result.result.message.content[0].text
 
-            # Small delay to respect rate limits
-            time.sleep(rate_limit_delay)
+        # Calculate incongruence and get Tvllm embedding
+        incong_score, tvllm_emb = calculate_incongruence(
+            claude_desc, video['transcript'], bert_model, bert_tokenizer, device
+        )
 
-            # Calculate incongruence and get Tvllm embedding
-            incong_score, tvllm_emb = calculate_incongruence(
-                claude_desc, transcript, bert_model, bert_tokenizer, device
-            )
+        # Store results
+        result_dict = {
+            'video_id': video_id,
+            'vllm_description': claude_desc,
+            'incongruence_score': incong_score,
+            'label': video['label']
+        }
 
-            # Store results
-            result = {
-                'video_id': video_id,
-                'vllm_description': claude_desc,  # Store for inspection
-                'incongruence_score': incong_score,
-                'label': label
-            }
+        # Add Tvllm embedding columns (768 dimensions)
+        for i, val in enumerate(tvllm_emb):
+            result_dict[f'tvllm_{i}'] = float(val)
 
-            # Add Tvllm embedding columns (768 dimensions)
-            for i, val in enumerate(tvllm_emb):
-                result[f'tvllm_{i}'] = float(val)
-
-            results.append(result)
-
-            # Progress update every 50 videos
-            if (idx + 1) % 50 == 0:
-                print(f"\n  Progress: {idx + 1}/{len(video_data)} videos processed")
-                print(f"  Latest incongruence: {incong_score:.3f}")
-                print(f"  Latest description: {claude_desc[:100]}...")
-
-        except Exception as e:
-            failed_count += 1
-            if failed_count <= 10:
-                print(f"\nWarning: Failed for {video_id}: {e}")
-
-            # If rate limited, increase delay
-            if "rate_limit" in str(e).lower():
-                rate_limit_delay = min(rate_limit_delay * 2, 5.0)
-                print(f"  Increasing delay to {rate_limit_delay}s")
-                time.sleep(rate_limit_delay)
-
-    if failed_count > 10:
-        print(f"\n... and {failed_count - 10} more failures")
+        results.append(result_dict)
 
     return results
 
@@ -219,9 +200,10 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     output_file = os.path.join(output_dir, 'vllm_features.csv')
     descriptions_file = os.path.join(output_dir, 'vllm_descriptions.csv')
+    batch_id_file = os.path.join(output_dir, 'vllm_batch_id.txt')
 
     print("="*60)
-    print("VLLM Feature Extraction (Claude API)")
+    print("VLLM Feature Extraction (Claude Batch API)")
     print("="*60)
 
     # Check cache - if output exists, reuse it
@@ -243,112 +225,123 @@ def main():
         return False
 
     # Initialize Claude client
-    print("\nInitializing Claude API client...")
     claude_client = Anthropic(api_key=api_key)
-    print("✓ Claude client ready")
 
-    # Load BERT model for embeddings
-    print("\nLoading BERT model for embeddings...")
-    bert_model = AutoModel.from_pretrained("bert-base-uncased")
-    bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    # Check for pending batch
+    if os.path.exists(batch_id_file):
+        with open(batch_id_file, 'r') as f:
+            batch_id = f.read().strip()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    bert_model = bert_model.to(device)
-    bert_model.eval()
-    print(f"✓ BERT model loaded (device: {device})")
+        print(f"\n✓ Found pending batch: {batch_id}")
+        print("Checking status...")
 
-    # Load transcripts
-    print("\nLoading transcripts...")
-    mtv_transcripts = pd.read_csv(mtv_transcripts_path, sep='\t')
-    nmtv_transcripts = pd.read_csv(nmtv_transcripts_path, sep='\t')
+        batch = claude_client.messages.batches.retrieve(batch_id)
 
-    print(f"Found {len(mtv_transcripts)} MTV transcripts")
-    print(f"Found {len(nmtv_transcripts)} NMTV transcripts")
-    print(f"Total: {len(mtv_transcripts) + len(nmtv_transcripts)} videos")
+        if batch.processing_status == 'ended':
+            succeeded = batch.request_counts.succeeded
+            total = succeeded + batch.request_counts.errored
+            print(f"✓ Batch complete: {succeeded}/{total} succeeded")
+        else:
+            print(f"⏳ Batch still processing, run again later to retrieve results")
+            return True
 
-    # Estimate cost
-    total_videos = len(mtv_transcripts) + len(nmtv_transcripts)
-    # Claude 3.5 Sonnet: ~$3 per 1M input tokens, ~$15 per 1M output tokens
-    # Image ~1600 tokens, prompt ~50 tokens, output ~50 tokens
-    # Rough estimate: ~$0.006 per image
-    estimated_cost = total_videos * 0.006
-    print(f"\nEstimated API cost: ~${estimated_cost:.2f}")
-    print("(Actual cost may vary based on image sizes and response lengths)")
+        # Load necessary data to process results
+        print("\nLoading BERT model...")
+        bert_model = AutoModel.from_pretrained("bert-base-uncased")
+        bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model = bert_model.to(device)
+        bert_model.eval()
 
-    response = input("\nProceed with Claude API extraction? [y/N]: ").strip().lower()
-    if response != 'y':
-        print("Aborted by user")
-        return False
+        print("Loading transcripts...")
+        mtv_transcripts = pd.read_csv(mtv_transcripts_path, sep='\t')
+        nmtv_transcripts = pd.read_csv(nmtv_transcripts_path, sep='\t')
 
-    # Process videos
-    all_results = []
+        print("Loading video info...")
+        mtv_info = load_video_info(mtv_transcripts, mtv_thumb_dir, label=1)
+        nmtv_info = load_video_info(nmtv_transcripts, nmtv_thumb_dir, label=0)
+        video_info_map = {v['video_id']: v for v in mtv_info + nmtv_info}
 
-    print("\n" + "="*60)
-    print("Processing MTV videos (clickbait)...")
-    print("="*60)
-    mtv_results = process_videos(
-        mtv_transcripts, mtv_thumb_dir,
-        claude_client, bert_model, bert_tokenizer,
-        device, label=1
-    )
-    all_results.extend(mtv_results)
+        # Retrieve and process results
+        print("Retrieving results...")
+        batch_results = []
+        for result in claude_client.messages.batches.results(batch_id):
+            if result.result.type == 'succeeded':
+                batch_results.append(result)
 
-    print("\n" + "="*60)
-    print("Processing NMTV videos (non-clickbait)...")
-    print("="*60)
-    nmtv_results = process_videos(
-        nmtv_transcripts, nmtv_thumb_dir,
-        claude_client, bert_model, bert_tokenizer,
-        device, label=0
-    )
-    all_results.extend(nmtv_results)
+        print(f"Processing {len(batch_results)} results...")
+        all_results = process_batch_results(batch_results, video_info_map, bert_model, bert_tokenizer, device)
 
-    # Create DataFrame
-    print("\nCreating DataFrame...")
-    df = pd.DataFrame(all_results)
+        # Clean up batch ID file
+        os.remove(batch_id_file)
 
-    # Separate descriptions from features for readability
-    descriptions_df = df[['video_id', 'vllm_description', 'label']]
-    descriptions_file = os.path.join(output_dir, 'vllm_descriptions.csv')
-    descriptions_df.to_csv(descriptions_file, index=False)
+        # Create DataFrame
+        print("\nCreating DataFrame...")
+        df = pd.DataFrame(all_results)
 
-    # Save features (drop description column for main features file)
-    features_df = df.drop(columns=['vllm_description'])
-    features_df.to_csv(output_file, index=False)
+        # Separate descriptions from features for readability
+        descriptions_df = df[['video_id', 'vllm_description', 'label']]
+        descriptions_df.to_csv(descriptions_file, index=False)
 
-    print(f"\n{'='*60}")
-    print("SUCCESS! VLLM features extracted with Claude")
-    print('='*60)
-    print(f"\nFeatures saved to: {output_file}")
-    print(f"Descriptions saved to: {descriptions_file}")
-    print(f"Total videos processed: {len(features_df)}")
-    print(f"Output shape: {features_df.shape}")
+        # Save features (drop description column for main features file)
+        features_df = df.drop(columns=['vllm_description'])
+        features_df.to_csv(output_file, index=False)
 
-    # Statistics
-    print("\nIncongruence Score Statistics:")
-    print(f"  Range: [{features_df['incongruence_score'].min():.3f}, {features_df['incongruence_score'].max():.3f}]")
-    print(f"  Mean: {features_df['incongruence_score'].mean():.3f}")
-    print(f"  Std: {features_df['incongruence_score'].std():.3f}")
+        print(f"\n{'='*60}")
+        print("SUCCESS! VLLM features extracted")
+        print('='*60)
+        print(f"Features saved to: {output_file}")
+        print(f"Total videos: {len(features_df)}")
+        print(f"Output shape: {features_df.shape}")
 
-    print("\nBy Label:")
-    for label in [0, 1]:
-        subset = features_df[features_df['label'] == label]
-        label_name = "Non-Clickbait" if label == 0 else "Clickbait"
-        print(f"  {label_name}: mean={subset['incongruence_score'].mean():.3f}, std={subset['incongruence_score'].std():.3f}")
+        # Statistics
+        print(f"\nIncongruence: mean={features_df['incongruence_score'].mean():.3f}, std={features_df['incongruence_score'].std():.3f}")
 
-    print("\nInterpretation:")
-    print("  - Higher incongruence (closer to 1): Thumbnail shows X, but video is about Y")
-    print("  - Lower incongruence (closer to 0): Thumbnail accurately represents content")
-    print("  - Hypothesis: Clickbait videos should have HIGHER incongruence scores")
+        return True
 
-    # Show sample descriptions
-    print("\nSample Claude Descriptions (first 5):")
-    for idx, row in descriptions_df.head(5).iterrows():
-        label_name = "Clickbait" if row['label'] == 1 else "Non-Clickbait"
-        print(f"\n  Video: {row['video_id']} ({label_name})")
-        print(f"  Description: {row['vllm_description']}")
+    else:
+        # New batch submission
+        print("\nLoading BERT model...")
+        bert_model = AutoModel.from_pretrained("bert-base-uncased")
+        bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model = bert_model.to(device)
+        bert_model.eval()
 
-    return True
+        print("Loading transcripts...")
+        mtv_transcripts = pd.read_csv(mtv_transcripts_path, sep='\t')
+        nmtv_transcripts = pd.read_csv(nmtv_transcripts_path, sep='\t')
+
+        print(f"Found {len(mtv_transcripts)} MTV + {len(nmtv_transcripts)} NMTV transcripts")
+
+        print("Preparing batch requests...")
+        mtv_requests, mtv_info = prepare_batch_requests(mtv_transcripts, mtv_thumb_dir, label=1)
+        nmtv_requests, nmtv_info = prepare_batch_requests(nmtv_transcripts, nmtv_thumb_dir, label=0)
+
+        all_requests = mtv_requests + nmtv_requests
+
+        print(f"Prepared {len(all_requests)} requests")
+
+        # Estimate cost (Batch API is 50% cheaper)
+        estimated_cost = len(all_requests) * 0.003
+        print(f"Estimated cost: ~${estimated_cost:.2f} (50% savings)")
+
+        response = input("\nSubmit batch? [y/N]: ").strip().lower()
+        if response != 'y':
+            return False
+
+        # Submit batch
+        print("\nSubmitting batch...")
+        batch = claude_client.messages.batches.create(requests=all_requests)
+        batch_id = batch.id
+
+        # Save batch ID
+        with open(batch_id_file, 'w') as f:
+            f.write(batch_id)
+
+        print(f"✓ Batch submitted: {batch_id}")
+        print("Run this script again later to retrieve results")
+        return True
 
 
 if __name__ == "__main__":

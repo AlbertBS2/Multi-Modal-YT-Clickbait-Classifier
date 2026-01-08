@@ -41,21 +41,16 @@ def main():
 
     # All scripts to run
     scripts = [
-        ('extract_visual_features.py', 'Visual Features (Vcnn)'),
-        ('extract_nlp_features.py', 'NLP Features'),
-        ('extract_clip_features.py', 'CLIP Alignment (Sclip)'),
+        #('extract_visual_features.py', 'Visual Features (Vcnn)'),
+        #('extract_nlp_features.py', 'NLP Features'),
+        #('extract_clip_features.py', 'CLIP Alignment (Sclip)'),
         ('extract_vllm_features_claude.py', 'VLLM Incongruence (Tvllm)'),
         ('create_multimodal_dataset.py', 'Dataset Creation'),
     ]
 
-    print("="*60)
-    print("MULTIMODAL FEATURE EXTRACTION PIPELINE")
-    print("="*60)
-    print("Extracting ALL features (3,224 dimensions)")
-
     # Check API key availability
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("\n⚠️  ANTHROPIC_API_KEY not found - VLLM will use cached features if available")
+        print("!!!!!!!ANTHROPIC_API_KEY not found - VLLM will use cached features if available!!!!!!!!")
 
     print("="*60)
 
@@ -66,13 +61,9 @@ def main():
             print(f"\n✗ Pipeline failed at: {name}")
             sys.exit(1)
 
-    print("\n" + "="*60)
-    print("✓✓✓ PIPELINE COMPLETED SUCCESSFULLY!")
-    print("="*60)
-    print("\nDatasets created in: CreateML/datasets/")
-    print("  - train.csv (3,224 features: Vcnn + NLP + CLIP + VLLM)")
-    print("  - validation.csv")
-    print("  - test.csv")
+
+    print("PIPELINE COMPLETED SUCCESSFULLY!")
+
     print("\nReady for training in CreateML or PyTorch!")
 
 
