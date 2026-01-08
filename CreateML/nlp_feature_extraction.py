@@ -13,6 +13,7 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 
 
+# STATISTICAL ANALYSIS
 def extract_statistical_features(transcript):
     """
     Extract statistical text features from a transcript.
@@ -23,32 +24,34 @@ def extract_statistical_features(transcript):
     Returns:
         features (np.ndarray): 15-dimensional array of statistical features.
     """
+
+    # EDGE CASE
     if not transcript or len(transcript.strip()) == 0:
         return np.zeros(15)
 
-    # Basic counts
+    # BASIC COUNTS
     transcript_length = len(transcript)
     words = word_tokenize(transcript.lower())
     word_count = len(words)
 
-    # Avoid division by zero
+    # AVOID DIVISION BY ZERO
     if word_count == 0:
         return np.zeros(15)
 
-    # Average word length
+    # AVERAGE WORD LENGTH
     avg_word_length = np.mean([len(word) for word in words])
 
-    # Sentence statistics
+    # SENTENCE STATISTICS
     sentences = sent_tokenize(transcript)
     sentence_count = len(sentences)
     avg_sentence_length = word_count / max(sentence_count, 1)
 
-    # Punctuation counts
+    # PUNCTUATION COUNTS
     exclamation_count = transcript.count('!')
     question_count = transcript.count('?')
     ellipsis_count = transcript.count('...')
 
-    # Uppercase analysis
+    # CAPITALIZATION RATIOS
     words_text = re.findall(r'\b[A-Za-z]+\b', transcript)
     if len(words_text) == 0:
         uppercase_word_ratio = 0
@@ -59,18 +62,19 @@ def extract_statistical_features(transcript):
         all_caps_words = [w for w in words_text if w.isupper() and len(w) > 1]
 
         uppercase_word_ratio = len(uppercase_words) / len(words_text)
-        # Capitalized words excluding sentence starts
+
+        # CAPITALIZED WORDS EXCLUDING ALL SENTENCE STARTS
         capitalized_word_ratio = (len(uppercase_words) - sentence_count) / max(len(words_text), 1)
         all_caps_ratio = len(all_caps_words) / len(words_text)
 
-    # Number count
+    # NUMBER COUNT
     number_count = len(re.findall(r'\b\d+\b', transcript))
 
-    # Vocabulary diversity
+    # VOCABULARY DIVERSITY
     unique_words = set(words)
     unique_word_ratio = len(unique_words) / word_count
 
-    # Stopword ratio
+    # STOPWORD RATIO
     try:
         stop_words = set(stopwords.words('english'))
         stopword_count = len([w for w in words if w in stop_words])
@@ -78,7 +82,7 @@ def extract_statistical_features(transcript):
     except:
         stopword_ratio = 0
 
-    # Punctuation density
+    # PUNCTUATION DENSITY
     punctuation_count = len(re.findall(r'[^\w\s]', transcript))
     punctuation_density = punctuation_count / transcript_length
 
@@ -103,6 +107,7 @@ def extract_statistical_features(transcript):
     return features
 
 
+# SENTIMENT ANALYSIS
 def extract_sentiment_features(transcript):
     """
     Extract sentiment features from a transcript using TextBlob.
@@ -113,18 +118,20 @@ def extract_sentiment_features(transcript):
     Returns:
         features (np.ndarray): 3-dimensional array of sentiment features.
     """
+
+    # EDGE CASE
     if not transcript or len(transcript.strip()) == 0:
         return np.zeros(3)
 
     blob = TextBlob(transcript)
 
-    # Polarity: -1 (negative) to 1 (positive)
+    # POLARITY: -1 (negative) to 1 (positive)
     polarity = blob.sentiment.polarity
 
-    # Subjectivity: 0 (objective) to 1 (subjective)
+    # SUBJECTIVITY: 0 (objective) to 1 (subjective)
     subjectivity = blob.sentiment.subjectivity
 
-    # Sentiment intensity (absolute value of polarity)
+    # INTENSITY (absolute value of polarity)
     intensity = abs(polarity)
 
     features = np.array([polarity, subjectivity, intensity])
@@ -132,6 +139,7 @@ def extract_sentiment_features(transcript):
     return features
 
 
+# LANGUAGE COMPLEXITY ANALYSIS
 def extract_complexity_features(transcript):
     """
     Extract linguistic complexity features from a transcript.
@@ -142,16 +150,20 @@ def extract_complexity_features(transcript):
     Returns:
         features (np.ndarray): 4-dimensional array of complexity features.
     """
+
+    # EDGE CASE
     if not transcript or len(transcript.strip()) == 0:
         return np.zeros(4)
 
+    # TOKENIZE AND COUNT WORDS
     words = word_tokenize(transcript.lower())
     word_count = len(words)
 
+    # CASE
     if word_count == 0:
         return np.zeros(4)
 
-    # Lexical density: ratio of content words to total words
+    # LEXICAL DENSITY: RATIO OF CONTENT WORDS TO TOTAL WORDS
     try:
         stop_words = set(stopwords.words('english'))
         content_words = [w for w in words if w.isalpha() and w not in stop_words]
@@ -159,7 +171,7 @@ def extract_complexity_features(transcript):
     except:
         lexical_density = 0
 
-    # Average syllables per word (simplified estimation)
+    # AVERAGE SYLLABLES PER WORD (SIMPLIFIED ESTIMATION)
     def count_syllables(word):
         """Estimate syllable count based on vowel groups."""
         word = word.lower()
@@ -186,7 +198,7 @@ def extract_complexity_features(transcript):
     syllables = [count_syllables(w) for w in words if w.isalpha()]
     avg_syllables_per_word = np.mean(syllables) if syllables else 0
 
-    # Flesch Reading Ease Score
+    # FLESCH READING EASE SCORE (COMBINATION OF AVERAGE LENGTH AND AVERAGE SYLLABLES PER WORD)
     sentences = sent_tokenize(transcript)
     sentence_count = len(sentences)
     total_syllables = sum(syllables)
@@ -196,7 +208,7 @@ def extract_complexity_features(transcript):
     else:
         flesch_reading_ease = 0
 
-    # Automated Readability Index
+    # AUTOMATED READABILITY INDEX (ARI)
     if sentence_count > 0 and word_count > 0:
         characters = sum(len(w) for w in words)
         automated_readability_index = 4.71 * (characters / word_count) + 0.5 * (word_count / sentence_count) - 21.43
@@ -213,25 +225,26 @@ def extract_complexity_features(transcript):
     return features
 
 
+# EMBEDDING ANALYSIS
 def extract_sentence_embeddings(transcript, model):
-    """
-    Extract sentence embeddings from a transcript using a pre-trained sentence transformer model.
-
-    Args:
-        transcript (str): The transcript text to analyze.
-        model (SentenceTransformer): Pre-trained sentence transformer model.
-
-    Returns:
-        embeddings (np.ndarray): 384-dimensional sentence embedding vector.
-    """
+    # EDGE CASE
     if not transcript or len(transcript.strip()) == 0:
-        # Return zero vector if transcript is empty
         return np.zeros(384)
 
-    # Encode the entire transcript into a single embedding
-    embedding = model.encode(transcript, convert_to_numpy=True, show_progress_bar=False)
+    # CREATE LIST OF WORDS
+    words = transcript.split()
 
-    return embedding
+    # SPLIT INTO CHUNKS OF 100 WORDS
+    chunks = [" ".join(words[i: i + 100])
+              for i in range(0, len(words), 100)]
+
+    # ENCODE ALL CHUNKS
+    embeddings = model.encode(chunks, show_progress_bar=False)
+
+    # AVERAGE EMBEDDINGS FOR THE TRANSCRIPT
+    master_embedding = np.mean(embeddings, axis=0)
+
+    return master_embedding
 
 
 def extract_all_nlp_features(transcript, model):
