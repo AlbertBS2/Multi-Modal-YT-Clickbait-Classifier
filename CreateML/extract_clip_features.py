@@ -119,7 +119,12 @@ def main():
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
     # SET DEVICE
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
     model = model.to(device)
     model.eval()
 

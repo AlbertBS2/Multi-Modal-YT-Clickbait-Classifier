@@ -33,7 +33,12 @@ IMG_SIZE = (224, 224)
 BATCH_SIZE = 32
 EPOCHS = 20
 LEARNING_RATE = 0.001
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.backends.mps.is_available():
+    DEVICE = torch.device("mps")
+elif torch.cuda.is_available():
+    DEVICE = torch.device("cuda")
+else:
+    DEVICE = torch.device("cpu")
 
 # Random seed for reproducibility
 RANDOM_SEED = 42

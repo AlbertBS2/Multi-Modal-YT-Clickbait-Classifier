@@ -38,7 +38,12 @@ def extract_visual_features_batch(thumbnail_dirs, video_ids, labels, batch_size=
     feature_extractor.eval()
 
     # CHECK CUDA
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
     feature_extractor = feature_extractor.to(device)
 
     all_features = []

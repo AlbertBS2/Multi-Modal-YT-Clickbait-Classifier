@@ -1,17 +1,19 @@
 {
   "total_samples": 2223,
-  "num_features": 2455,
+  "num_features": 3224,
   "feature_breakdown": {
     "visual_features_vcnn": 2048,
     "nlp_sentence_embeddings": 384,
     "nlp_statistical_features": 15,
     "nlp_sentiment_features": 3,
     "nlp_complexity_features": 4,
-    "clip_alignment_sclip": 1
+    "clip_alignment_sclip": 1,
+    "vllm_embeddings_tvllm": 768,
+    "vllm_incongruence_score": 1
   },
   "gemini_features_included": {
     "clip_alignment": true,
-    "vllm_incongruence": false
+    "vllm_incongruence": true
   },
   "splits": {
     "train": {

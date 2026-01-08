@@ -20,6 +20,7 @@ import pandas as pd
 import numpy as np
 import base64
 import time
+import re
 from pathlib import Path
 from anthropic import Anthropic
 from transformers import AutoTokenizer, AutoModel
@@ -36,6 +37,13 @@ def encode_image_base64(image_path):
     """Encode image to base64 for Claude API."""
     with open(image_path, "rb") as image_file:
         return base64.standard_b64encode(image_file.read()).decode("utf-8")
+
+
+def clean_description(description):
+    # Remove "# Thumbnail Description" or "# YouTube Thumbnail Description" headers
+    pattern = r'^#\s*(YouTube\s+)?Thumbnail\s+Description\s*\n+'
+    cleaned = re.sub(pattern, '', description, flags=re.IGNORECASE)
+    return cleaned.strip()
 
 
 def load_video_info(video_data, thumbnail_dir, label):
@@ -162,6 +170,9 @@ def process_batch_results(batch_results, video_info_map, bert_model, bert_tokeni
         video = video_info_map[video_id]
         claude_desc = result.result.message.content[0].text
 
+        # Clean description (remove markdown headers)
+        claude_desc = clean_description(claude_desc)
+
         # Calculate incongruence and get Tvllm embedding
         incong_score, tvllm_emb = calculate_incongruence(
             claude_desc, video['transcript'], bert_model, bert_tokenizer, device
@@ -249,7 +260,13 @@ def main():
         print("\nLoading BERT model...")
         bert_model = AutoModel.from_pretrained("bert-base-uncased")
         bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+            print("schözz")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
         bert_model = bert_model.to(device)
         bert_model.eval()
 
@@ -304,7 +321,12 @@ def main():
         print("\nLoading BERT model...")
         bert_model = AutoModel.from_pretrained("bert-base-uncased")
         bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
         bert_model = bert_model.to(device)
         bert_model.eval()
 
