@@ -39,41 +39,23 @@ def run_script(script_path):
 def main():
     createml_dir = os.path.join(os.path.dirname(__file__), 'CreateML')
 
-    # Check if Claude API key is available
-    has_api_key = False # bool(os.environ.get("ANTHROPIC_API_KEY"))
-
-    # Base scripts (always run)
-    base_scripts = [
+    # All scripts to run
+    scripts = [
         ('extract_visual_features.py', 'Visual Features (Vcnn)'),
         ('extract_nlp_features.py', 'NLP Features'),
         ('extract_clip_features.py', 'CLIP Alignment (Sclip)'),
+        ('extract_vllm_features_claude.py', 'VLLM Incongruence (Tvllm)'),
+        ('create_multimodal_dataset.py', 'Dataset Creation'),
     ]
-
-    # VLLM script (requires API key)
-    vllm_script = ('extract_vllm_features_claude.py', 'VLLM Incongruence (Tvllm) - Claude API')
-
-    # Dataset creation (always last)
-    final_script = ('create_multimodal_dataset.py', 'Dataset Creation')
 
     print("="*60)
     print("MULTIMODAL FEATURE EXTRACTION PIPELINE")
     print("="*60)
+    print("Extracting ALL features (3,224 dimensions)")
 
-    if has_api_key:
-        print("This will extract ALL features (3,224 dimensions)")
-        print("\nExpected time: ~1-2 hours (no GPU required)")
-        print("Estimated cost: ~$13 (Claude API usage)")
-        scripts = base_scripts + [vllm_script] + [final_script]
-    else:
-        print("This will extract BASE features (2,455 dimensions)")
-        print("Includes: Vcnn + NLP + CLIP")
-        print("\n⚠️  VLLM features SKIPPED: ANTHROPIC_API_KEY not found")
-        print("To enable VLLM features:")
-        print("  1. Copy .env.example to .env in project root")
-        print("  2. Add your API key to .env file")
-        print("  3. Get key from: https://console.anthropic.com/settings/keys")
-        print("\nExpected time: ~45-60 minutes")
-        scripts = base_scripts + [final_script]
+    # Check API key availability
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("\n⚠️  ANTHROPIC_API_KEY not found - VLLM will use cached features if available")
 
     print("="*60)
 
@@ -88,12 +70,7 @@ def main():
     print("✓✓✓ PIPELINE COMPLETED SUCCESSFULLY!")
     print("="*60)
     print("\nDatasets created in: CreateML/datasets/")
-
-    if has_api_key:
-        print("  - train.csv (3,224 features: Vcnn + NLP + CLIP + VLLM)")
-    else:
-        print("  - train.csv (2,455 features: Vcnn + NLP + CLIP)")
-
+    print("  - train.csv (3,224 features: Vcnn + NLP + CLIP + VLLM)")
     print("  - validation.csv")
     print("  - test.csv")
     print("\nReady for training in CreateML or PyTorch!")
