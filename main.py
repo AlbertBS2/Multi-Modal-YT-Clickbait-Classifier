@@ -41,9 +41,9 @@ def main():
 
     # All scripts to run
     scripts = [
-        #('extract_visual_features.py', 'Visual Features (Vcnn)'),
-        #('extract_nlp_features.py', 'NLP Features'),
-        #('extract_clip_features.py', 'CLIP Alignment (Sclip)'),
+        ('extract_visual_features.py', 'Visual Features (Vcnn)'),
+        ('extract_nlp_features.py', 'NLP Features'),
+        ('extract_clip_features.py', 'CLIP Alignment (Sclip)'),
         ('extract_vllm_features_claude.py', 'VLLM Incongruence (Tvllm)'),
         ('create_multimodal_dataset.py', 'Dataset Creation'),
     ]
