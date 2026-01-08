@@ -5,6 +5,9 @@ This script extracts semantic alignment scores between thumbnails and transcript
 The alignment score (Sclip) measures how well the thumbnail matches the video content.
 """
 
+# TODO: CLIP has a strict limit of 77 tokens (roughly 50-75 words)!!!
+# Since video transcripts are long, the code cuts the text to the first 500 characters
+
 import os
 import pandas as pd
 import torch
