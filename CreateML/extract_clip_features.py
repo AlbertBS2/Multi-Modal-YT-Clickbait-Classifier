@@ -116,7 +116,7 @@ def main():
 
     output_dir = os.path.join(base_dir, 'features')
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, 'clip_features_2.csv')
+    output_file = os.path.join(output_dir, 'clip_features.csv')
 
     # LOAD CLIP MODEL
     model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
