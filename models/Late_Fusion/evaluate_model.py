@@ -13,9 +13,9 @@ from late_fusion import ClickbaitClassifier, load_data, prepare_datasets, create
 # Get the project root directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
-DATA_DIR = os.path.join(PROJECT_ROOT, "CreateML", "datasets", "cnn_vllm_clip_max_mean_incong")
+DATA_DIR = os.path.join(PROJECT_ROOT, "CreateML", "datasets", "cnn_vllm")
 
-MODEL_PATH = os.path.join(SCRIPT_DIR, "clickbait_classifier.pth")
+MODEL_PATH = os.path.join(SCRIPT_DIR, "cnn_vllm.pth")
 val_path = os.path.join(DATA_DIR, "valid.parquet")
 train_path = os.path.join(DATA_DIR, "train.parquet")
 
