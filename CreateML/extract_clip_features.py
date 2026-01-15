@@ -96,7 +96,7 @@ def process_videos(video_data, thumbnail_dir, model, processor, device, label):
             'video_id': video_id,
             'clip_max_similarity': sclip[0],
             'clip_mean_similarity': sclip[1],
-            'label': label
+            'clickbait_label': label
         })
 
     # RETURN

@@ -48,7 +48,6 @@ def extract_visual_features_batch(thumbnail_dirs, video_ids, labels, batch_size=
 
     all_features = []
     all_video_ids = []
-    all_labels = []
 
     # PROCESS EACH CATEGORY (MTV AND NMTV)
     for label in labels:
@@ -89,13 +88,11 @@ def extract_visual_features_batch(thumbnail_dirs, video_ids, labels, batch_size=
             for j, video_id in enumerate(batch_valid_ids):
                 all_features.append(features_np[j])
                 all_video_ids.append(video_id)
-                all_labels.append(label)
 
     # CREATE DATAFRAME
     df = pd.DataFrame({
         'video_id': all_video_ids,
-        'v_cnn': all_features,
-        'label': all_labels
+        'v_cnn': all_features
     })
 
     return df
