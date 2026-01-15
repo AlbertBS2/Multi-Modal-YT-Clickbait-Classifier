@@ -1,4 +1,4 @@
-video_id,clip_max_similarity,clip_mean_similarity,label
+video_id,clip_max_similarity,clip_mean_similarity,clickbait_label
 lepHJI4ze-w,0.28734099864959717,0.22212155163288116,1
 ezwXAlJ5pAY,0.2346726953983307,0.21021786332130432,1
 i6_OomloWUg,0.26113197207450867,0.23317304253578186,1
