@@ -4,7 +4,7 @@
 
 ## Overview
 
-This project builds a **multi-modal late-fusion classifier** that detects misleading ("clickbait") YouTube thumbnails by combining visual features, semantic alignment scores, and thumbnail–transcript incongruence signals. Rather than relying on thumbnails alone, the system jointly reasons over what the thumbnail *shows*, what the video *contains*, and how much the two *disagree* — mimicking the way human annotators judge clickbait.
+This project builds a **multimodal late-fusion classifier** that detects misleading ("clickbait") YouTube thumbnails by combining visual features, semantic alignment scores, and thumbnail-transcript incongruence signals. Rather than relying on thumbnails alone, the system jointly reasons over what the thumbnail *shows*, what the video *contains*, and how much the two *disagree*, mimicking the way human annotators judge clickbait. It consists on a multimodal late-fusion neural network classifier combining CNN features, CLIP similarity scores, and BERT embeddings of VLLM thumbnail descriptions to detect misleading thumbnails. A full machine learning pipeline is implemented (scraping, feature extraction, training, evaluation) achieving 86% recall and 88% accuracy, outperforming a CNN (thumbnails only) baseline, suggesting that quantifying thumbnail–transcript incongruence might be more effective than using thumbnails alone.
 
 ## Dataset
 
